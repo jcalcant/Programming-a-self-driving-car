@@ -11,8 +11,12 @@ import tf
 import cv2
 import yaml
 from scipy.spatial import KDTree
+import numpy as np
+
 
 STATE_COUNT_THRESHOLD = 3
+IMG_DIR = '/home/workspace/CarND-Capstone/ros/src/tl_detector/light_classification/train_imgs/'
+IMG_MAX = 50
 
 class TLDetector(object):
     def __init__(self):
@@ -51,7 +55,10 @@ class TLDetector(object):
         self.last_state = TrafficLight.UNKNOWN
         self.last_wp = -1
         self.state_count = 0
-
+        self.red_idx = 0 # red trafic light counter
+        self.not_red_idx = 0 # not-red trafic light counter
+        self.background_idx = 0 #background image counter
+        self.delay_counter = 0 # image capture delay counter
         rospy.spin()
 
     def pose_cb(self, msg):
@@ -77,6 +84,35 @@ class TLDetector(object):
         self.has_image = True
         self.camera_image = msg
         light_wp, state = self.process_traffic_lights()
+        
+        # Capture training images
+        #if (self.delay_counter % 4 == 0):
+            
+            #cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8") #convert from ROS message to opencv BGR image
+            #if state == TrafficLight.RED:
+            #    if self.red_idx < IMG_MAX:
+            #        cv2.imwrite(IMG_DIR+'red/red'+str(self.red_idx)+'.png',cv_image)
+            #        self.red_idx += 1
+            #        rospy.loginfo('Red light image captured idx: %i',self.red_idx)
+            #    else:
+            #        rospy.loginfo('Captured %s red light images',IMG_MAX)
+            #elif (state == TrafficLight.YELLOW) or (state == TrafficLight.GREEN):
+            #    if self.not_red_idx < IMG_MAX:
+            #        cv2.imwrite(IMG_DIR+'not_red/not_red'+str(self.not_red_idx)+'.png',cv_image)
+            #        rospy.loginfo('Not_red light image captured idx: %i',self.not_red_idx)
+            #        self.not_red_idx += 1
+            #    else:
+            #        rospy.loginfo('Captured %s not_red light images',IMG_MAX)
+                    
+            #background image. state == TrafficLight.UNKNOWN: 
+            #if self.background_idx < IMG_MAX:
+            #    cv2.imwrite(IMG_DIR+'background/background'+str(self.background_idx)+'.png',cv_image)
+            #    rospy.loginfo('Background image captured idx: %i',self.background_idx)
+            #    self.background_idx += 1
+            #else:
+            #    rospy.loginfo('Captured %s background images',IMG_MAX)
+                
+        #self.delay_counter += 1
 
         '''
         Publish upcoming red lights at camera frequency.
@@ -121,15 +157,35 @@ class TLDetector(object):
 
         """
         
-        return light.state
-        #if(not self.has_image):
-        #    self.prev_light_loc = None
-        #    return False
+        #return light.state
+        if(not self.has_image):
+            self.prev_light_loc = None
+            return False
 
-        #cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
+        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
 
         #Get classification
-        #return self.light_classifier.get_classification(cv_image)
+        #cl,tl_detected = self.light_classifier.get_classification(cv_image)
+        #rospy.loginfo('Detected class: %s.\tLight state: %s',str(cl),light.state)
+        
+        scores,classes = self.light_classifier.get_classification(cv_image)
+        
+        if (scores.size > 0 and classes.size > 0):
+            rospy.loginfo('Scores')
+            rospy.loginfo(scores)
+            rospy.loginfo('Classes')
+            rospy.loginfo(classes)
+            max_score = np.argmax(scores)
+            detected_class = int(classes[max_score])
+            rospy.loginfo('Detected class: %i',detected_class)
+            if detected_class == 1:
+                return TrafficLight.RED
+            elif detected_class == 2:
+                return TrafficLight.GREEN
+            else:
+                return TrafficLight.UNKNOWN
+        else:
+            return TrafficLight.UNKNOWN
 
     def process_traffic_lights(self):
         """Finds closest visible traffic light, if one exists, and determines its
